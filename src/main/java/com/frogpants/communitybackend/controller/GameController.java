@@ -1,5 +1,7 @@
 package com.frogpants.communitybackend.controller;
 
+import java.util.List;
+
 import org.springframework.web.bind.annotation.CrossOrigin;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -12,6 +14,13 @@ import org.springframework.web.bind.annotation.RestController;
 import com.frogpants.communitybackend.model.FrontendScoreSubmissionRequest;
 import com.frogpants.communitybackend.model.HealthResponse;
 import com.frogpants.communitybackend.model.LeaderboardResponse;
+import com.frogpants.communitybackend.model.MultiplayerCreateRoomRequest;
+import com.frogpants.communitybackend.model.MultiplayerJoinRoomRequest;
+import com.frogpants.communitybackend.model.MultiplayerLeaveRoomResponse;
+import com.frogpants.communitybackend.model.MultiplayerPresenceSnapshot;
+import com.frogpants.communitybackend.model.MultiplayerPresenceUpdateRequest;
+import com.frogpants.communitybackend.model.MultiplayerRoomDetails;
+import com.frogpants.communitybackend.model.MultiplayerRoomSummary;
 import com.frogpants.communitybackend.model.PlayerRegistrationRequest;
 import com.frogpants.communitybackend.model.PlayerSession;
 import com.frogpants.communitybackend.model.ScoreEntry;
@@ -59,6 +68,51 @@ public class GameController {
     @PostMapping("/frontend/scores")
     public ScoreEntry submitScoreForFrontend(@Valid @RequestBody FrontendScoreSubmissionRequest request) {
         return gameService.submitScoreByPlayerName(request);
+    }
+
+    @PostMapping("/multiplayer/rooms")
+    public MultiplayerRoomDetails createMultiplayerRoom(@Valid @RequestBody MultiplayerCreateRoomRequest request) {
+        return gameService.createRoomByPlayerName(request.playerName());
+    }
+
+    @GetMapping("/multiplayer/rooms")
+    public List<MultiplayerRoomSummary> listMultiplayerRooms(@RequestParam(defaultValue = "20") int limit) {
+        int boundedLimit = Math.max(1, Math.min(limit, 100));
+        return gameService.listRooms(boundedLimit);
+    }
+
+    @GetMapping("/multiplayer/rooms/{roomCode}")
+    public MultiplayerRoomDetails getMultiplayerRoom(@PathVariable String roomCode) {
+        return gameService.getRoomByCode(roomCode);
+    }
+
+    @PostMapping("/multiplayer/rooms/{roomCode}/join")
+    public MultiplayerRoomDetails joinMultiplayerRoom(
+            @PathVariable String roomCode,
+            @Valid @RequestBody MultiplayerJoinRoomRequest request
+    ) {
+        return gameService.joinRoomByCode(roomCode, request.playerName());
+    }
+
+    @PostMapping("/multiplayer/rooms/{roomCode}/leave")
+    public MultiplayerLeaveRoomResponse leaveMultiplayerRoom(
+            @PathVariable String roomCode,
+            @Valid @RequestBody MultiplayerJoinRoomRequest request
+    ) {
+        return gameService.leaveRoomByCode(roomCode, request.playerName());
+    }
+
+    @GetMapping("/multiplayer/rooms/{roomCode}/presence")
+    public MultiplayerPresenceSnapshot getMultiplayerPresence(@PathVariable String roomCode) {
+        return gameService.getRoomPresenceByCode(roomCode);
+    }
+
+    @PostMapping("/multiplayer/rooms/{roomCode}/presence")
+    public MultiplayerPresenceSnapshot updateMultiplayerPresence(
+            @PathVariable String roomCode,
+            @Valid @RequestBody MultiplayerPresenceUpdateRequest request
+    ) {
+        return gameService.upsertPresenceByRoomCode(roomCode, request.playerName(), request.x(), request.y());
     }
 
     @GetMapping("/leaderboard")

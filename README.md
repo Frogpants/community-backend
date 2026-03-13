@@ -111,6 +111,52 @@ Content-Type: application/json
 }
 ```
 
+### Multiplayer create room
+
+```http
+POST /api/multiplayer/rooms
+Content-Type: application/json
+```
+
+```json
+{
+	"playerName": "Frogpants"
+}
+```
+
+### Multiplayer join room
+
+```http
+POST /api/multiplayer/rooms/{roomCode}/join
+Content-Type: application/json
+```
+
+```json
+{
+	"playerName": "Frogpants"
+}
+```
+
+### Multiplayer leave room
+
+```http
+POST /api/multiplayer/rooms/{roomCode}/leave
+Content-Type: application/json
+```
+
+```json
+{
+	"playerName": "Frogpants"
+}
+```
+
+### Multiplayer room info and listing
+
+```http
+GET /api/multiplayer/rooms/{roomCode}
+GET /api/multiplayer/rooms?limit=20
+```
+
 ## Calling it from C++
 
 Your game can talk to this backend with any HTTP client library, for example:

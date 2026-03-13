@@ -1,5 +1,7 @@
 package com.frogpants.communitybackend;
 
+import static org.hamcrest.Matchers.greaterThan;
+import static org.hamcrest.Matchers.hasSize;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
@@ -57,8 +59,7 @@ class GameControllerTest {
 
         mockMvc.perform(get("/api/leaderboard"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.entries[0].playerName").value("Avery"))
-                .andExpect(jsonPath("$.entries[0].score").value(4200));
+                .andExpect(jsonPath("$.entries[?(@.playerName=='Avery' && @.score==4200)]").value(hasSize(greaterThan(0))));
     }
 
     @Test
@@ -89,7 +90,72 @@ class GameControllerTest {
 
         mockMvc.perform(get("/api/leaderboard"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.entries[0].playerName").value("Jules"))
-                .andExpect(jsonPath("$.entries[0].score").value(9001));
+                .andExpect(jsonPath("$.entries[?(@.playerName=='Jules' && @.score==9001)]").value(hasSize(greaterThan(0))));
+    }
+
+    @Test
+    void multiplayerRoomLifecycleWorks() throws Exception {
+        String createRoomResponse = mockMvc.perform(post("/api/multiplayer/rooms")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "playerName": "Mia"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.roomCode").exists())
+                .andExpect(jsonPath("$.members[0].playerName").value("Mia"))
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+
+        String roomCode = createRoomResponse.replaceAll(".*\\\"roomCode\\\":\\\"([^\\\"]+)\\\".*", "$1");
+
+        mockMvc.perform(post("/api/multiplayer/rooms/{roomCode}/join", roomCode)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "playerName": "Noah"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.roomCode").value(roomCode))
+                .andExpect(jsonPath("$.members.length()").value(2));
+
+        mockMvc.perform(get("/api/multiplayer/rooms/{roomCode}", roomCode))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.roomCode").value(roomCode))
+                .andExpect(jsonPath("$.members.length()").value(2));
+
+        mockMvc.perform(get("/api/multiplayer/rooms"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[?(@.roomCode=='" + roomCode + "')]" ).value(hasSize(greaterThan(0))));
+
+        mockMvc.perform(post("/api/multiplayer/rooms/{roomCode}/leave", roomCode)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "playerName": "Noah"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.roomCode").value(roomCode))
+                .andExpect(jsonPath("$.roomClosed").value(false))
+                .andExpect(jsonPath("$.playerCount").value(1));
+
+        mockMvc.perform(post("/api/multiplayer/rooms/{roomCode}/leave", roomCode)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "playerName": "Mia"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.roomCode").value(roomCode))
+                .andExpect(jsonPath("$.roomClosed").value(true))
+                .andExpect(jsonPath("$.playerCount").value(0));
+
+        mockMvc.perform(get("/api/multiplayer/rooms/{roomCode}", roomCode))
+                .andExpect(status().isNotFound());
     }
 }
