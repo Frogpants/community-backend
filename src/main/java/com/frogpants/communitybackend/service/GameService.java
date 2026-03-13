@@ -8,10 +8,10 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
-import java.time.Instant;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.ClassPathResource;
@@ -19,10 +19,10 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
 
+import com.frogpants.communitybackend.model.FrontendScoreSubmissionRequest;
 import com.frogpants.communitybackend.model.PlayerRegistrationRequest;
 import com.frogpants.communitybackend.model.PlayerSession;
 import com.frogpants.communitybackend.model.ScoreEntry;
-import com.frogpants.communitybackend.model.FrontendScoreSubmissionRequest;
 import com.frogpants.communitybackend.model.ScoreSubmissionRequest;
 
 @Service
