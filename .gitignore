@@ -4,3 +4,6 @@
 *.iml
 /data/
 *.db
+community-backend.db
+community-backend.db-shm
+community-backend.db-wal

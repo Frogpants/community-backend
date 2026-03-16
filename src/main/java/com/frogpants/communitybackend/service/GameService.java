@@ -3,7 +3,6 @@ package com.frogpants.communitybackend.service;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.sql.Connection;
-import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
@@ -15,7 +14,8 @@ import java.util.Locale;
 import java.util.UUID;
 import java.util.concurrent.ThreadLocalRandom;
 
-import org.springframework.beans.factory.annotation.Value;
+import javax.sql.DataSource;
+
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -38,10 +38,10 @@ public class GameService {
 
     private static final String ROOM_CODE_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 
-    private final String databaseUrl;
+    private final DataSource dataSource;
 
-    public GameService(@Value("${app.database.url}") String databaseUrl) {
-        this.databaseUrl = databaseUrl;
+    public GameService(DataSource dataSource) {
+        this.dataSource = dataSource;
         initializeDatabase();
     }
 
@@ -50,7 +50,7 @@ public class GameService {
         String playerName = request.playerName().trim();
         Instant registeredAt = Instant.now();
 
-        try (Connection connection = DriverManager.getConnection(databaseUrl);
+        try (Connection connection = dataSource.getConnection();
              PreparedStatement statement = connection.prepareStatement(
                      "INSERT INTO players (player_id, player_name, registered_at) VALUES (?, ?, ?)")) {
             statement.setString(1, playerId);
@@ -76,7 +76,7 @@ public class GameService {
         String playerId = UUID.randomUUID().toString();
         Instant registeredAt = Instant.now();
 
-        try (Connection connection = DriverManager.getConnection(databaseUrl);
+        try (Connection connection = dataSource.getConnection();
              PreparedStatement statement = connection.prepareStatement(
                      "INSERT INTO players (player_id, player_name, registered_at) VALUES (?, ?, ?)")) {
             statement.setString(1, playerId);
@@ -91,7 +91,7 @@ public class GameService {
     }
 
     public PlayerSession getPlayer(String playerId) {
-        try (Connection connection = DriverManager.getConnection(databaseUrl);
+        try (Connection connection = dataSource.getConnection();
              PreparedStatement statement = connection.prepareStatement(
                      "SELECT player_id, player_name, registered_at FROM players WHERE player_id = ?")) {
             statement.setString(1, playerId);
@@ -132,7 +132,7 @@ public class GameService {
             submittedAt
         );
 
-        try (Connection connection = DriverManager.getConnection(databaseUrl);
+        try (Connection connection = dataSource.getConnection();
              PreparedStatement statement = connection.prepareStatement(
                      "INSERT INTO scores (player_id, player_name, score, level, submitted_at) VALUES (?, ?, ?, ?, ?)")) {
             statement.setString(1, scoreEntry.playerId());
@@ -164,7 +164,7 @@ public class GameService {
     public List<ScoreEntry> getTopScores(int limit) {
         List<ScoreEntry> entries = new ArrayList<>();
 
-        try (Connection connection = DriverManager.getConnection(databaseUrl);
+        try (Connection connection = dataSource.getConnection();
              PreparedStatement statement = connection.prepareStatement(
                      "SELECT player_id, player_name, score, level, submitted_at " +
                              "FROM scores ORDER BY score DESC, submitted_at ASC LIMIT ?")) {
@@ -194,7 +194,7 @@ public class GameService {
         Instant createdAt = Instant.now();
         Instant joinedAt = Instant.now();
 
-        try (Connection connection = DriverManager.getConnection(databaseUrl)) {
+        try (Connection connection = dataSource.getConnection()) {
             try (PreparedStatement roomStatement = connection.prepareStatement(
                     "INSERT INTO multiplayer_rooms (room_id, room_code, host_player_id, created_at) VALUES (?, ?, ?, ?)");
                  PreparedStatement memberStatement = connection.prepareStatement(
@@ -220,7 +220,7 @@ public class GameService {
     public List<MultiplayerRoomSummary> listRooms(int limit) {
         List<MultiplayerRoomSummary> rooms = new ArrayList<>();
 
-        try (Connection connection = DriverManager.getConnection(databaseUrl);
+        try (Connection connection = dataSource.getConnection();
              PreparedStatement statement = connection.prepareStatement(
                      "SELECT r.room_id, r.room_code, r.created_at, COUNT(m.player_id) AS player_count " +
                              "FROM multiplayer_rooms r " +
@@ -251,7 +251,7 @@ public class GameService {
         String hostPlayerId;
         Instant createdAt;
 
-        try (Connection connection = DriverManager.getConnection(databaseUrl);
+        try (Connection connection = dataSource.getConnection();
              PreparedStatement roomStatement = connection.prepareStatement(
                      "SELECT room_id, host_player_id, created_at FROM multiplayer_rooms WHERE room_code = ?")) {
             roomStatement.setString(1, roomCode);
@@ -294,7 +294,7 @@ public class GameService {
         PlayerSession player = getOrCreatePlayerByName(rawPlayerName);
         String roomId = getRoomIdByCode(roomCode);
 
-        try (Connection connection = DriverManager.getConnection(databaseUrl);
+        try (Connection connection = dataSource.getConnection();
              PreparedStatement statement = connection.prepareStatement(
                      "INSERT OR IGNORE INTO multiplayer_room_members (room_id, player_id, joined_at) VALUES (?, ?, ?)")) {
             statement.setString(1, roomId);
@@ -316,7 +316,7 @@ public class GameService {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Player not found");
         }
 
-        try (Connection connection = DriverManager.getConnection(databaseUrl)) {
+        try (Connection connection = dataSource.getConnection()) {
             try (PreparedStatement removePresence = connection.prepareStatement(
                     "DELETE FROM multiplayer_player_presence WHERE room_id = ? AND player_id = ?")) {
                 removePresence.setString(1, roomId);
@@ -396,7 +396,7 @@ public class GameService {
         String roomId = getRoomIdByCode(roomCode);
         Instant now = Instant.now();
 
-        try (Connection connection = DriverManager.getConnection(databaseUrl)) {
+        try (Connection connection = dataSource.getConnection()) {
             try (PreparedStatement ensureMember = connection.prepareStatement(
                     "INSERT OR IGNORE INTO multiplayer_room_members (room_id, player_id, joined_at) VALUES (?, ?, ?)")) {
                 ensureMember.setString(1, roomId);
@@ -430,12 +430,12 @@ public class GameService {
         String roomId = getRoomIdByCode(roomCode);
         List<MultiplayerPresenceEntry> players = new ArrayList<>();
 
-        try (Connection connection = DriverManager.getConnection(databaseUrl);
+        try (Connection connection = dataSource.getConnection();
              PreparedStatement statement = connection.prepareStatement(
                      "SELECT p.player_id, p.player_name, p.pos_x, p.pos_y, p.updated_at " +
                              "FROM multiplayer_player_presence p " +
                              "JOIN multiplayer_room_members m ON m.room_id = p.room_id AND m.player_id = p.player_id " +
-                             "WHERE p.room_id = ? ORDER BY p.updated_at DESC")) {
+                             "WHERE p.room_id = ? AND datetime(p.updated_at) >= datetime('now', '-5 seconds') ORDER BY p.updated_at DESC")) {
             statement.setString(1, roomId);
             try (ResultSet resultSet = statement.executeQuery()) {
                 while (resultSet.next()) {
@@ -466,8 +466,11 @@ public class GameService {
             throw new IllegalStateException("Failed to load schema.sql", e);
         }
 
-        try (Connection connection = DriverManager.getConnection(databaseUrl);
+        try (Connection connection = dataSource.getConnection();
              Statement statement = connection.createStatement()) {
+            statement.execute("PRAGMA journal_mode=WAL");
+            statement.execute("PRAGMA synchronous=NORMAL");
+            statement.execute("PRAGMA cache_size=-8000");
             for (String command : schemaSql.split(";")) {
                 String trimmed = command.trim();
                 if (!trimmed.isEmpty()) {
@@ -480,7 +483,7 @@ public class GameService {
     }
 
     private PlayerSession findPlayerByName(String playerName) {
-        try (Connection connection = DriverManager.getConnection(databaseUrl);
+        try (Connection connection = dataSource.getConnection();
              PreparedStatement statement = connection.prepareStatement(
                      "SELECT player_id, player_name, registered_at FROM players " +
                              "WHERE lower(player_name) = lower(?) ORDER BY registered_at ASC LIMIT 1")) {
@@ -502,7 +505,7 @@ public class GameService {
     }
 
     private String getRoomIdByCode(String roomCode) {
-        try (Connection connection = DriverManager.getConnection(databaseUrl);
+        try (Connection connection = dataSource.getConnection();
              PreparedStatement statement = connection.prepareStatement(
                      "SELECT room_id FROM multiplayer_rooms WHERE room_code = ?")) {
             statement.setString(1, roomCode);
@@ -528,7 +531,7 @@ public class GameService {
     }
 
     private boolean roomCodeExists(String roomCode) {
-        try (Connection connection = DriverManager.getConnection(databaseUrl);
+        try (Connection connection = dataSource.getConnection();
              PreparedStatement statement = connection.prepareStatement(
                      "SELECT 1 FROM multiplayer_rooms WHERE room_code = ? LIMIT 1")) {
             statement.setString(1, roomCode);
