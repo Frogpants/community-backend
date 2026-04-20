@@ -2,16 +2,20 @@ package com.frogpants.communitybackend;
 
 import static org.hamcrest.Matchers.greaterThan;
 import static org.hamcrest.Matchers.hasSize;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
+import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.web.servlet.MockMvc;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+import java.nio.charset.StandardCharsets;
 
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -27,15 +31,27 @@ class GameControllerTest {
                 .andExpect(jsonPath("$.status").value("ok"));
     }
 
+                @Test
+                void registerPlayerAcceptsJsonBody() throws Exception {
+                                mockMvc.perform(post("/api/players/register")
+                                                                                                .contentType(MediaType.APPLICATION_JSON)
+                                                                                                .content("""
+                                                                                                                                {
+                                                                                                                                        "playerName": "Avery"
+                                                                                                                                }
+                                                                                                                                """))
+                                                                .andExpect(status().isOk())
+                                                                .andExpect(jsonPath("$.playerName").value("Avery"));
+                }
+
     @Test
     void registerAndSubmitScoreFlowWorks() throws Exception {
-        String playerResponse = mockMvc.perform(post("/api/players/register")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("""
-                                {
-                                  \"playerName\": \"Avery\"
-                                }
-                                """))
+                                String playerResponse = mockMvc.perform(multipart("/api/players/register")
+                                                                                                .file(jsonPart("""
+                                                                                                                                {
+                                                                                                                                        \"playerName\": \"Avery\"
+                                                                                                                                }
+                                                                                                                                """)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.playerName").value("Avery"))
                 .andReturn()
@@ -44,15 +60,14 @@ class GameControllerTest {
 
         String playerId = playerResponse.replaceAll(".*\"playerId\":\"([^\"]+)\".*", "$1");
 
-        mockMvc.perform(post("/api/scores")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("""
-                                {
-                                  \"playerId\": \"%s\",
-                                  \"score\": 4200,
-                                  \"level\": 3
-                                }
-                                """.formatted(playerId)))
+                                mockMvc.perform(multipart("/api/scores")
+                                                                                                .file(jsonPart("""
+                                                                                                                                {
+                                                                                                                                        \"playerId\": \"%s\",
+                                                                                                                                        \"score\": 4200,
+                                                                                                                                        \"level\": 3
+                                                                                                                                }
+                                                                                                                                """.formatted(playerId))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.score").value(4200))
                 .andExpect(jsonPath("$.level").value(3));
@@ -64,25 +79,23 @@ class GameControllerTest {
 
     @Test
     void frontendFlowWorksWithPlayerNameOnly() throws Exception {
-        mockMvc.perform(post("/api/frontend/players")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("""
-                                {
-                                  \"playerName\": \"Jules\"
-                                }
-                                """))
+                                mockMvc.perform(multipart("/api/frontend/players")
+                                                                                                .file(jsonPart("""
+                                                                                                                                {
+                                                                                                                                        \"playerName\": \"Jules\"
+                                                                                                                                }
+                                                                                                                                """)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.playerName").value("Jules"));
 
-        mockMvc.perform(post("/api/frontend/scores")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("""
-                                {
-                                  \"playerName\": \"Jules\",
-                                  \"score\": 9001,
-                                  \"level\": 6
-                                }
-                                """))
+                                mockMvc.perform(multipart("/api/frontend/scores")
+                                                                                                .file(jsonPart("""
+                                                                                                                                {
+                                                                                                                                        \"playerName\": \"Jules\",
+                                                                                                                                        \"score\": 9001,
+                                                                                                                                        \"level\": 6
+                                                                                                                                }
+                                                                                                                                """)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.playerName").value("Jules"))
                 .andExpect(jsonPath("$.score").value(9001))
@@ -95,13 +108,12 @@ class GameControllerTest {
 
     @Test
     void multiplayerRoomLifecycleWorks() throws Exception {
-        String createRoomResponse = mockMvc.perform(post("/api/multiplayer/rooms")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("""
-                                {
-                                  "playerName": "Mia"
-                                }
-                                """))
+                                String createRoomResponse = mockMvc.perform(multipart("/api/multiplayer/rooms")
+                                                                                                .file(jsonPart("""
+                                                                                                                                {
+                                                                                                                                        "playerName": "Mia"
+                                                                                                                                }
+                                                                                                                                """)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.roomCode").exists())
                 .andExpect(jsonPath("$.members[0].playerName").value("Mia"))
@@ -111,13 +123,12 @@ class GameControllerTest {
 
         String roomCode = createRoomResponse.replaceAll(".*\\\"roomCode\\\":\\\"([^\\\"]+)\\\".*", "$1");
 
-        mockMvc.perform(post("/api/multiplayer/rooms/{roomCode}/join", roomCode)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("""
-                                {
-                                  "playerName": "Noah"
-                                }
-                                """))
+                                mockMvc.perform(multipart("/api/multiplayer/rooms/{roomCode}/join", roomCode)
+                                                                                                .file(jsonPart("""
+                                                                                                                                {
+                                                                                                                                        "playerName": "Noah"
+                                                                                                                                }
+                                                                                                                                """)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.roomCode").value(roomCode))
                 .andExpect(jsonPath("$.members.length()").value(2));
@@ -131,25 +142,23 @@ class GameControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[?(@.roomCode=='" + roomCode + "')]" ).value(hasSize(greaterThan(0))));
 
-        mockMvc.perform(post("/api/multiplayer/rooms/{roomCode}/leave", roomCode)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("""
-                                {
-                                  "playerName": "Noah"
-                                }
-                                """))
+                                mockMvc.perform(multipart("/api/multiplayer/rooms/{roomCode}/leave", roomCode)
+                                                                                                .file(jsonPart("""
+                                                                                                                                {
+                                                                                                                                        "playerName": "Noah"
+                                                                                                                                }
+                                                                                                                                """)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.roomCode").value(roomCode))
                 .andExpect(jsonPath("$.roomClosed").value(false))
                 .andExpect(jsonPath("$.playerCount").value(1));
 
-        mockMvc.perform(post("/api/multiplayer/rooms/{roomCode}/leave", roomCode)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("""
-                                {
-                                  "playerName": "Mia"
-                                }
-                                """))
+                                mockMvc.perform(multipart("/api/multiplayer/rooms/{roomCode}/leave", roomCode)
+                                                                                                .file(jsonPart("""
+                                                                                                                                {
+                                                                                                                                        "playerName": "Mia"
+                                                                                                                                }
+                                                                                                                                """)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.roomCode").value(roomCode))
                 .andExpect(jsonPath("$.roomClosed").value(true))
@@ -158,4 +167,13 @@ class GameControllerTest {
         mockMvc.perform(get("/api/multiplayer/rooms/{roomCode}", roomCode))
                 .andExpect(status().isNotFound());
     }
+
+        private MockMultipartFile jsonPart(String json) {
+                return new MockMultipartFile(
+                                "requestFile",
+                                "request.json",
+                                MediaType.APPLICATION_JSON_VALUE,
+                                json.getBytes(StandardCharsets.UTF_8)
+                );
+        }
 }

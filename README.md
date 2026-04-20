@@ -7,7 +7,6 @@ This project gives you a minimal HTTP API that a C++ client can call for:
 - health checks
 - player registration
 - score submission
-- leaderboard reads
 
 ## Stack
 
@@ -32,6 +31,10 @@ SQLite data is stored at `./community-backend.db`.
 mvn test
 mvn package
 ```
+
+
+
+
 
 ## API
 
@@ -62,6 +65,8 @@ Content-Type: application/json
 }
 ```
 
+Multipart upload is also supported: send the same JSON as the `requestFile` part.
+
 ### Frontend player session (get-or-create by name)
 
 ```http
@@ -74,6 +79,8 @@ Content-Type: application/json
   "playerName": "Avery"
 }
 ```
+
+Multipart upload is also supported: send the same JSON as the `requestFile` part.
 
 ### Submit score
 
@@ -89,6 +96,8 @@ Content-Type: application/json
 	"level": 3
 }
 ```
+
+Multipart upload is also supported: send the same JSON as the `requestFile` part.
 
 ### Read leaderboard
 
@@ -111,6 +120,8 @@ Content-Type: application/json
 }
 ```
 
+Multipart upload is also supported: send the same JSON as the `requestFile` part.
+
 ### Multiplayer create room
 
 ```http
@@ -123,6 +134,8 @@ Content-Type: application/json
 	"playerName": "Frogpants"
 }
 ```
+
+Multipart upload is also supported: send the same JSON as the `requestFile` part.
 
 ### Multiplayer join room
 
@@ -137,6 +150,8 @@ Content-Type: application/json
 }
 ```
 
+Multipart upload is also supported: send the same JSON as the `requestFile` part.
+
 ### Multiplayer leave room
 
 ```http
@@ -149,6 +164,8 @@ Content-Type: application/json
 	"playerName": "Frogpants"
 }
 ```
+
+Multipart upload is also supported: send the same JSON as the `requestFile` part.
 
 ### Multiplayer room info and listing
 
