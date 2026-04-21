@@ -7,6 +7,7 @@ public record TaskDataEntry(
         String userName,
         String name,
         String taskName,
+        int room,
         boolean completed,
         Instant createdAt,
         Instant updatedAt

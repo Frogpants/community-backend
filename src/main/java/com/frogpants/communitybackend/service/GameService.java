@@ -467,21 +467,22 @@ public class GameService {
 
         try (Connection connection = dataSource.getConnection();
              PreparedStatement statement = connection.prepareStatement(
-                     "INSERT INTO \"task data\" (player_id, user_name, task_name, completed, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?) " +
-                             "ON CONFLICT(player_id, task_name) DO UPDATE SET " +
+                     "INSERT INTO \"task data\" (player_id, user_name, task_name, room_number, completed, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?) " +
+                             "ON CONFLICT(player_id, task_name, room_number) DO UPDATE SET " +
                              "user_name=excluded.user_name, completed=excluded.completed, updated_at=excluded.updated_at")) {
             statement.setString(1, subject.playerId());
             statement.setString(2, subject.userName());
             statement.setString(3, subject.taskName());
-            statement.setInt(4, completed ? 1 : 0);
-            statement.setString(5, now.toString());
+            statement.setInt(4, subject.roomNumber());
+            statement.setInt(5, completed ? 1 : 0);
             statement.setString(6, now.toString());
+            statement.setString(7, now.toString());
             statement.executeUpdate();
         } catch (SQLException e) {
             throw new IllegalStateException("Failed to save task data", e);
         }
 
-        return getTaskDataByKey(subject.playerId(), subject.taskName());
+        return getTaskDataByKey(subject.playerId(), subject.taskName(), subject.roomNumber());
     }
 
     public TaskDataEntry completeTaskData(TaskDataRequest request) {
@@ -490,20 +491,21 @@ public class GameService {
 
         try (Connection connection = dataSource.getConnection();
              PreparedStatement statement = connection.prepareStatement(
-                     "INSERT INTO \"task data\" (player_id, user_name, task_name, completed, created_at, updated_at) VALUES (?, ?, ?, 1, ?, ?) " +
-                             "ON CONFLICT(player_id, task_name) DO UPDATE SET " +
+                     "INSERT INTO \"task data\" (player_id, user_name, task_name, room_number, completed, created_at, updated_at) VALUES (?, ?, ?, ?, 1, ?, ?) " +
+                             "ON CONFLICT(player_id, task_name, room_number) DO UPDATE SET " +
                              "user_name=excluded.user_name, completed=1, updated_at=excluded.updated_at")) {
             statement.setString(1, subject.playerId());
             statement.setString(2, subject.userName());
             statement.setString(3, subject.taskName());
-            statement.setString(4, now.toString());
+            statement.setInt(4, subject.roomNumber());
             statement.setString(5, now.toString());
+            statement.setString(6, now.toString());
             statement.executeUpdate();
         } catch (SQLException e) {
             throw new IllegalStateException("Failed to complete task data", e);
         }
 
-        return getTaskDataByKey(subject.playerId(), subject.taskName());
+        return getTaskDataByKey(subject.playerId(), subject.taskName(), subject.roomNumber());
     }
 
     public List<TaskDataEntry> getTaskData() {
@@ -511,14 +513,15 @@ public class GameService {
 
         try (Connection connection = dataSource.getConnection();
              PreparedStatement statement = connection.prepareStatement(
-                     "SELECT player_id, user_name, task_name, completed, created_at, updated_at FROM \"task data\" ORDER BY datetime(updated_at) DESC")) {
+                     "SELECT player_id, user_name, task_name, room_number, completed, created_at, updated_at FROM \"task data\" ORDER BY datetime(updated_at) DESC")) {
             try (ResultSet resultSet = statement.executeQuery()) {
                 while (resultSet.next()) {
                     entries.add(new TaskDataEntry(
                             resultSet.getString("player_id"),
                             resultSet.getString("user_name"),
-                        resultSet.getString("task_name"),
                             resultSet.getString("task_name"),
+                            resultSet.getString("task_name"),
+                            resultSet.getInt("room_number"),
                             resultSet.getInt("completed") == 1,
                             Instant.parse(resultSet.getString("created_at")),
                             Instant.parse(resultSet.getString("updated_at"))
@@ -575,7 +578,10 @@ public class GameService {
             return;
         }
 
-        boolean needsMigration = !columns.contains("player_id") || !columns.contains("user_name") || !columns.contains("task_name");
+        boolean needsMigration = !columns.contains("player_id")
+                || !columns.contains("user_name")
+                || !columns.contains("task_name")
+                || !columns.contains("room_number");
         if (needsMigration) {
             migrateTaskDataTable(connection);
             return;
@@ -611,6 +617,7 @@ public class GameService {
 
         try (Statement indexStatement = connection.createStatement()) {
             indexStatement.execute("CREATE INDEX IF NOT EXISTS idx_task_data_user_name ON \"task data\"(user_name)");
+            indexStatement.execute("CREATE INDEX IF NOT EXISTS idx_task_data_room_number ON \"task data\"(room_number)");
         }
     }
 
@@ -627,15 +634,17 @@ public class GameService {
                             "player_id TEXT NOT NULL, " +
                             "user_name TEXT NOT NULL, " +
                             "task_name TEXT NOT NULL, " +
+                            "room_number INTEGER NOT NULL DEFAULT -1, " +
                             "completed INTEGER NOT NULL DEFAULT 0 CHECK (completed IN (0, 1)), " +
                             "created_at TEXT NOT NULL, " +
                             "updated_at TEXT NOT NULL, " +
-                            "PRIMARY KEY (player_id, task_name), " +
+                            "PRIMARY KEY (player_id, task_name, room_number), " +
                             "FOREIGN KEY (player_id) REFERENCES players(player_id)" +
                             ")"
             );
             statement.execute("CREATE INDEX IF NOT EXISTS idx_task_data_completed ON \"task data\"(completed)");
             statement.execute("CREATE INDEX IF NOT EXISTS idx_task_data_user_name ON \"task data\"(user_name)");
+            statement.execute("CREATE INDEX IF NOT EXISTS idx_task_data_room_number ON \"task data\"(room_number)");
         }
 
         try (PreparedStatement copyStatement = connection.prepareStatement(
@@ -659,6 +668,7 @@ public class GameService {
                     }
 
                     boolean completed = readBooleanColumn(resultSet, metaData, "completed", false);
+                    int roomNumber = readIntColumn(resultSet, metaData, -1, "room_number", "room", "room_id");
                     String createdAt = firstNonBlank(resultSet, metaData, "created_at", "createdat");
                     if (createdAt == null) {
                         createdAt = Instant.now().toString();
@@ -670,13 +680,14 @@ public class GameService {
                     }
 
                     try (PreparedStatement insertStatement = connection.prepareStatement(
-                            "INSERT INTO \"task data\" (player_id, user_name, task_name, completed, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)")) {
+                            "INSERT INTO \"task data\" (player_id, user_name, task_name, room_number, completed, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)")) {
                         insertStatement.setString(1, playerId);
                         insertStatement.setString(2, userName);
                         insertStatement.setString(3, taskName);
-                        insertStatement.setInt(4, completed ? 1 : 0);
-                        insertStatement.setString(5, createdAt);
-                        insertStatement.setString(6, updatedAt);
+                        insertStatement.setInt(4, roomNumber);
+                        insertStatement.setInt(5, completed ? 1 : 0);
+                        insertStatement.setString(6, createdAt);
+                        insertStatement.setString(7, updatedAt);
                         insertStatement.executeUpdate();
                     }
                 }
@@ -724,6 +735,31 @@ public class GameService {
         return defaultValue;
     }
 
+    private int readIntColumn(ResultSet resultSet, ResultSetMetaData metaData, int defaultValue, String... candidateColumns) throws SQLException {
+        for (String candidateColumn : candidateColumns) {
+            for (int index = 1; index <= metaData.getColumnCount(); index++) {
+                String columnLabel = metaData.getColumnLabel(index);
+                String columnName = metaData.getColumnName(index);
+                if (!candidateColumn.equalsIgnoreCase(columnLabel) && !candidateColumn.equalsIgnoreCase(columnName)) {
+                    continue;
+                }
+
+                String rawValue = resultSet.getString(index);
+                if (rawValue == null || rawValue.isBlank()) {
+                    return defaultValue;
+                }
+
+                try {
+                    return Integer.parseInt(rawValue.trim());
+                } catch (NumberFormatException ignored) {
+                    return defaultValue;
+                }
+            }
+        }
+
+        return defaultValue;
+    }
+
     private PlayerSession ensurePlayerByName(Connection connection, String playerName) throws SQLException {
         try (PreparedStatement findStatement = connection.prepareStatement(
                 "SELECT player_id, player_name, registered_at FROM players WHERE lower(player_name) = lower(?) ORDER BY registered_at ASC LIMIT 1")) {
@@ -753,12 +789,13 @@ public class GameService {
         return new PlayerSession(playerId, playerName, registeredAt);
     }
 
-    private TaskDataEntry getTaskDataByKey(String playerId, String taskName) {
+    private TaskDataEntry getTaskDataByKey(String playerId, String taskName, int roomNumber) {
         try (Connection connection = dataSource.getConnection();
              PreparedStatement statement = connection.prepareStatement(
-                     "SELECT player_id, user_name, task_name, completed, created_at, updated_at FROM \"task data\" WHERE player_id = ? AND task_name = ? LIMIT 1")) {
+                     "SELECT player_id, user_name, task_name, room_number, completed, created_at, updated_at FROM \"task data\" WHERE player_id = ? AND task_name = ? AND room_number = ? LIMIT 1")) {
             statement.setString(1, playerId);
             statement.setString(2, taskName);
+            statement.setInt(3, roomNumber);
             try (ResultSet resultSet = statement.executeQuery()) {
                 if (!resultSet.next()) {
                     throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Task not found");
@@ -767,8 +804,9 @@ public class GameService {
                 return new TaskDataEntry(
                         resultSet.getString("player_id"),
                         resultSet.getString("user_name"),
-                    resultSet.getString("task_name"),
                         resultSet.getString("task_name"),
+                        resultSet.getString("task_name"),
+                        resultSet.getInt("room_number"),
                         resultSet.getInt("completed") == 1,
                         Instant.parse(resultSet.getString("created_at")),
                         Instant.parse(resultSet.getString("updated_at"))
@@ -781,6 +819,7 @@ public class GameService {
 
     private TaskSubject resolveTaskSubject(TaskDataRequest request) {
         String taskName = resolveTaskName(request);
+        int roomNumber = resolveRoomNumber(request);
 
         PlayerSession player;
         if (request.playerId() != null && !request.playerId().isBlank()) {
@@ -795,7 +834,7 @@ public class GameService {
                 ? request.userName().trim()
                 : player.playerName();
 
-        return new TaskSubject(player.playerId(), userName, taskName);
+        return new TaskSubject(player.playerId(), userName, taskName, roomNumber);
     }
 
     private String resolveTaskName(TaskDataRequest request) {
@@ -817,7 +856,14 @@ public class GameService {
         );
     }
 
-    private record TaskSubject(String playerId, String userName, String taskName) {}
+    private int resolveRoomNumber(TaskDataRequest request) {
+        if (request.room() != null) {
+            return request.room();
+        }
+        return -1;
+    }
+
+    private record TaskSubject(String playerId, String userName, String taskName, int roomNumber) {}
 
     private PlayerSession findPlayerByName(String playerName) {
         try (Connection connection = dataSource.getConnection();
