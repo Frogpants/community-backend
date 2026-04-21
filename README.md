@@ -7,6 +7,8 @@ This project gives you a minimal HTTP API that a C++ client can call for:
 - health checks
 - player registration
 - score submission
+- leaderboard reads
+- task persistence for frontend task list
 
 ## Stack
 
@@ -105,6 +107,41 @@ Multipart upload is also supported: send the same JSON as the `requestFile` part
 GET /api/leaderboard?limit=10
 ```
 
+### Save task data
+
+```http
+POST /tasks
+Content-Type: application/json
+```
+
+```json
+{
+	"name": "wash dishes",
+	"completed": false
+}
+```
+
+### Mark task completed
+
+```http
+POST /tasks/complete
+Content-Type: application/json
+```
+
+```json
+{
+	"name": "wash dishes"
+}
+```
+
+### Fetch task data
+
+```http
+GET /tasks
+```
+
+Returns items with `name`, `completed`, `createdAt`, and `updatedAt`.
+
 ### Frontend score submit (by player name)
 
 ```http
@@ -193,6 +230,7 @@ Typical flow:
 ## Notes
 
 - Data is persisted in SQLite, so player and score data survives restarts.
+- Task records are persisted in SQLite table `"task data"`.
 - The schema is auto-initialized at startup from `src/main/resources/schema.sql`.
 - If you outgrow SQLite, the same service can move to PostgreSQL or MySQL with datasource changes.
 - CORS is enabled via `app.cors.allowed-origins` in `application.properties` (defaults to `*`).

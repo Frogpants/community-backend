@@ -54,3 +54,13 @@ CREATE TABLE IF NOT EXISTS multiplayer_player_presence (
 
 CREATE INDEX IF NOT EXISTS idx_multiplayer_presence_room_updated
     ON multiplayer_player_presence(room_id, updated_at DESC);
+
+CREATE TABLE IF NOT EXISTS "task data" (
+    task_name TEXT PRIMARY KEY,
+    completed INTEGER NOT NULL DEFAULT 0 CHECK (completed IN (0, 1)),
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_task_data_completed
+    ON "task data"(completed);

@@ -32,6 +32,8 @@ import com.frogpants.communitybackend.model.PlayerRegistrationRequest;
 import com.frogpants.communitybackend.model.PlayerSession;
 import com.frogpants.communitybackend.model.ScoreEntry;
 import com.frogpants.communitybackend.model.ScoreSubmissionRequest;
+import com.frogpants.communitybackend.model.TaskDataEntry;
+import com.frogpants.communitybackend.model.TaskDataRequest;
 
 @Service
 public class GameService {
@@ -455,6 +457,69 @@ public class GameService {
         return new MultiplayerPresenceSnapshot(roomCode, players);
     }
 
+    public TaskDataEntry saveTaskData(TaskDataRequest request) {
+        String taskName = request.name().trim();
+        boolean completed = request.completed() != null && request.completed();
+        Instant now = Instant.now();
+
+        try (Connection connection = dataSource.getConnection();
+             PreparedStatement statement = connection.prepareStatement(
+                     "INSERT INTO \"task data\" (task_name, completed, created_at, updated_at) VALUES (?, ?, ?, ?) " +
+                             "ON CONFLICT(task_name) DO UPDATE SET completed=excluded.completed, updated_at=excluded.updated_at")) {
+            statement.setString(1, taskName);
+            statement.setInt(2, completed ? 1 : 0);
+            statement.setString(3, now.toString());
+            statement.setString(4, now.toString());
+            statement.executeUpdate();
+        } catch (SQLException e) {
+            throw new IllegalStateException("Failed to save task data", e);
+        }
+
+        return getTaskDataByName(taskName);
+    }
+
+    public TaskDataEntry completeTaskData(TaskDataRequest request) {
+        String taskName = request.name().trim();
+        Instant now = Instant.now();
+
+        try (Connection connection = dataSource.getConnection();
+             PreparedStatement statement = connection.prepareStatement(
+                     "INSERT INTO \"task data\" (task_name, completed, created_at, updated_at) VALUES (?, 1, ?, ?) " +
+                             "ON CONFLICT(task_name) DO UPDATE SET completed=1, updated_at=excluded.updated_at")) {
+            statement.setString(1, taskName);
+            statement.setString(2, now.toString());
+            statement.setString(3, now.toString());
+            statement.executeUpdate();
+        } catch (SQLException e) {
+            throw new IllegalStateException("Failed to complete task data", e);
+        }
+
+        return getTaskDataByName(taskName);
+    }
+
+    public List<TaskDataEntry> getTaskData() {
+        List<TaskDataEntry> entries = new ArrayList<>();
+
+        try (Connection connection = dataSource.getConnection();
+             PreparedStatement statement = connection.prepareStatement(
+                     "SELECT task_name, completed, created_at, updated_at FROM \"task data\" ORDER BY datetime(updated_at) DESC")) {
+            try (ResultSet resultSet = statement.executeQuery()) {
+                while (resultSet.next()) {
+                    entries.add(new TaskDataEntry(
+                            resultSet.getString("task_name"),
+                            resultSet.getInt("completed") == 1,
+                            Instant.parse(resultSet.getString("created_at")),
+                            Instant.parse(resultSet.getString("updated_at"))
+                    ));
+                }
+            }
+        } catch (SQLException e) {
+            throw new IllegalStateException("Failed to load task data", e);
+        }
+
+        return entries;
+    }
+
     private void initializeDatabase() {
         String schemaSql;
         try {
@@ -479,6 +544,28 @@ public class GameService {
             }
         } catch (SQLException e) {
             throw new IllegalStateException("Failed to initialize SQLite schema", e);
+        }
+    }
+
+    private TaskDataEntry getTaskDataByName(String taskName) {
+        try (Connection connection = dataSource.getConnection();
+             PreparedStatement statement = connection.prepareStatement(
+                     "SELECT task_name, completed, created_at, updated_at FROM \"task data\" WHERE task_name = ? LIMIT 1")) {
+            statement.setString(1, taskName);
+            try (ResultSet resultSet = statement.executeQuery()) {
+                if (!resultSet.next()) {
+                    throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Task not found");
+                }
+
+                return new TaskDataEntry(
+                        resultSet.getString("task_name"),
+                        resultSet.getInt("completed") == 1,
+                        Instant.parse(resultSet.getString("created_at")),
+                        Instant.parse(resultSet.getString("updated_at"))
+                );
+            }
+        } catch (SQLException e) {
+            throw new IllegalStateException("Failed to load task data", e);
         }
     }
 
