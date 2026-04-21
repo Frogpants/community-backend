@@ -16,6 +16,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import java.nio.charset.StandardCharsets;
+import java.util.UUID;
 
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -104,6 +105,68 @@ class GameControllerTest {
         mockMvc.perform(get("/api/leaderboard"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.entries[?(@.playerName=='Jules' && @.score==9001)]").value(hasSize(greaterThan(0))));
+    }
+
+    @Test
+    void taskEndpointsWorkThroughApiPrefix() throws Exception {
+        String taskName = "task-" + UUID.randomUUID();
+
+        mockMvc.perform(post("/api/tasks")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content("""
+                                        {
+                                                "name": "%s",
+                                                "completed": false
+                                        }
+                                        """.formatted(taskName)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.name").value(taskName))
+                .andExpect(jsonPath("$.completed").value(false));
+
+        mockMvc.perform(post("/api/tasks/complete")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content("""
+                                        {
+                                                "name": "%s"
+                                        }
+                                        """.formatted(taskName)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.name").value(taskName))
+                .andExpect(jsonPath("$.completed").value(true));
+
+        mockMvc.perform(get("/api/tasks"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[?(@.name=='" + taskName + "' && @.completed==true)]").value(hasSize(greaterThan(0))));
+    }
+
+    @Test
+    void taskEndpointsSupportMultipartRoomAndTaskIdPayload() throws Exception {
+        mockMvc.perform(multipart("/api/tasks")
+                                .file(jsonPart("""
+                                        {
+                                                "room": 2,
+                                                "taskId": 7,
+                                                "completed": false
+                                        }
+                                        """)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.name").value("room:2:task:7"))
+                .andExpect(jsonPath("$.completed").value(false));
+
+        mockMvc.perform(multipart("/api/tasks/complete")
+                                .file(jsonPart("""
+                                        {
+                                                "room": 2,
+                                                "taskId": 7
+                                        }
+                                        """)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.name").value("room:2:task:7"))
+                .andExpect(jsonPath("$.completed").value(true));
+
+        mockMvc.perform(get("/api/tasks"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[?(@.name=='room:2:task:7' && @.completed==true)]").value(hasSize(greaterThan(0))));
     }
 
     @Test
