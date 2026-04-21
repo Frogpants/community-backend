@@ -56,19 +56,9 @@ CREATE INDEX IF NOT EXISTS idx_multiplayer_presence_room_updated
     ON multiplayer_player_presence(room_id, updated_at DESC);
 
 CREATE TABLE IF NOT EXISTS "task data" (
-    player_id TEXT NOT NULL,
     user_name TEXT NOT NULL,
     task_name TEXT NOT NULL,
     room_number INTEGER NOT NULL DEFAULT -1,
     completed INTEGER NOT NULL DEFAULT 0 CHECK (completed IN (0, 1)),
-    created_at TEXT NOT NULL,
-    updated_at TEXT NOT NULL,
-    PRIMARY KEY (player_id, task_name, room_number),
-    FOREIGN KEY (player_id) REFERENCES players(player_id)
+    PRIMARY KEY (user_name, task_name, room_number)
 );
-
-CREATE INDEX IF NOT EXISTS idx_task_data_completed
-    ON "task data"(completed);
-
-CREATE INDEX IF NOT EXISTS idx_task_data_room_number
-    ON "task data"(room_number);

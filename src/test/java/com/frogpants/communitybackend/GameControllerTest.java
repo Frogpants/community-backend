@@ -115,28 +115,33 @@ class GameControllerTest {
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .content("""
                                         {
-                                                "name": "%s",
+                                                "userName": "Mia",
+                                                "taskName": "%s",
                                                 "completed": false
                                         }
                                         """.formatted(taskName)))
                 .andExpect(status().isOk())
+                .andExpect(jsonPath("$.userName").value("Mia"))
                 .andExpect(jsonPath("$.name").value(taskName))
+                .andExpect(jsonPath("$.taskName").value(taskName))
                 .andExpect(jsonPath("$.completed").value(false));
 
         mockMvc.perform(post("/api/tasks/complete")
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .content("""
                                         {
-                                                "name": "%s"
+                                                "userName": "Mia",
+                                                "taskName": "%s"
                                         }
                                         """.formatted(taskName)))
                 .andExpect(status().isOk())
+                .andExpect(jsonPath("$.userName").value("Mia"))
                 .andExpect(jsonPath("$.name").value(taskName))
                 .andExpect(jsonPath("$.completed").value(true));
 
         mockMvc.perform(get("/api/tasks"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$[?(@.name=='" + taskName + "' && @.completed==true)]").value(hasSize(greaterThan(0))));
+                .andExpect(jsonPath("$[?(@.userName=='Mia' && @.taskName=='" + taskName + "' && @.completed==true)]").value(hasSize(greaterThan(0))));
     }
 
     @Test
@@ -144,29 +149,74 @@ class GameControllerTest {
         mockMvc.perform(multipart("/api/tasks")
                                 .file(jsonPart("""
                                         {
+                                                "userName": "Noah",
                                                 "room": 2,
                                                 "taskId": 7,
                                                 "completed": false
                                         }
                                         """)))
                 .andExpect(status().isOk())
+                .andExpect(jsonPath("$.userName").value("Noah"))
                 .andExpect(jsonPath("$.name").value("room:2:task:7"))
                 .andExpect(jsonPath("$.completed").value(false));
 
         mockMvc.perform(multipart("/api/tasks/complete")
                                 .file(jsonPart("""
                                         {
+                                                "userName": "Noah",
                                                 "room": 2,
                                                 "taskId": 7
                                         }
                                         """)))
                 .andExpect(status().isOk())
+                .andExpect(jsonPath("$.userName").value("Noah"))
                 .andExpect(jsonPath("$.name").value("room:2:task:7"))
                 .andExpect(jsonPath("$.completed").value(true));
 
         mockMvc.perform(get("/api/tasks"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$[?(@.name=='room:2:task:7' && @.completed==true)]").value(hasSize(greaterThan(0))));
+                .andExpect(jsonPath("$[?(@.userName=='Noah' && @.name=='room:2:task:7' && @.completed==true)]").value(hasSize(greaterThan(0))));
+    }
+
+    @Test
+    void taskEndpointsAcceptGameStyleDisplayNameAndRoomAliases() throws Exception {
+        mockMvc.perform(post("/api/tasks")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content("""
+                                        {
+                                                "characterDisplayName": "Luna",
+                                                "taskDisplayName": "wash dishes",
+                                                "roomNumber": 4,
+                                                "taskNumber": 9,
+                                                "completed": false
+                                        }
+                                        """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.userName").value("Luna"))
+                .andExpect(jsonPath("$.name").value("wash dishes"))
+                .andExpect(jsonPath("$.taskName").value("wash dishes"))
+                .andExpect(jsonPath("$.room").value(4))
+                .andExpect(jsonPath("$.completed").value(false));
+
+        mockMvc.perform(post("/api/tasks/complete")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content("""
+                                        {
+                                                "displayName": "Luna",
+                                                "taskLabel": "wash dishes",
+                                                "currentRoom": 4
+                                        }
+                                        """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.userName").value("Luna"))
+                .andExpect(jsonPath("$.name").value("wash dishes"))
+                .andExpect(jsonPath("$.room").value(4))
+                .andExpect(jsonPath("$.completed").value(true));
+
+        mockMvc.perform(get("/api/tasks"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[?(@.userName=='Luna' && @.taskName=='wash dishes' && @.room==4 && @.completed==true)]")
+                        .value(hasSize(greaterThan(0))));
     }
 
     @Test

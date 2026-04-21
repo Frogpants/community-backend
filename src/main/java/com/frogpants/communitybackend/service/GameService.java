@@ -463,49 +463,41 @@ public class GameService {
     public TaskDataEntry saveTaskData(TaskDataRequest request) {
         TaskSubject subject = resolveTaskSubject(request);
         boolean completed = request.completed() != null && request.completed();
-        Instant now = Instant.now();
 
         try (Connection connection = dataSource.getConnection();
              PreparedStatement statement = connection.prepareStatement(
-                     "INSERT INTO \"task data\" (player_id, user_name, task_name, room_number, completed, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?) " +
-                             "ON CONFLICT(player_id, task_name, room_number) DO UPDATE SET " +
-                             "user_name=excluded.user_name, completed=excluded.completed, updated_at=excluded.updated_at")) {
-            statement.setString(1, subject.playerId());
-            statement.setString(2, subject.userName());
-            statement.setString(3, subject.taskName());
-            statement.setInt(4, subject.roomNumber());
-            statement.setInt(5, completed ? 1 : 0);
-            statement.setString(6, now.toString());
-            statement.setString(7, now.toString());
+                     "INSERT INTO \"task data\" (user_name, task_name, room_number, completed) VALUES (?, ?, ?, ?) " +
+                             "ON CONFLICT(user_name, task_name, room_number) DO UPDATE SET " +
+                             "completed=excluded.completed")) {
+            statement.setString(1, subject.userName());
+            statement.setString(2, subject.taskName());
+            statement.setInt(3, subject.roomNumber());
+            statement.setInt(4, completed ? 1 : 0);
             statement.executeUpdate();
         } catch (SQLException e) {
             throw new IllegalStateException("Failed to save task data", e);
         }
 
-        return getTaskDataByKey(subject.playerId(), subject.taskName(), subject.roomNumber());
+        return getTaskDataByKey(subject.userName(), subject.taskName(), subject.roomNumber());
     }
 
     public TaskDataEntry completeTaskData(TaskDataRequest request) {
         TaskSubject subject = resolveTaskSubject(request);
-        Instant now = Instant.now();
 
         try (Connection connection = dataSource.getConnection();
              PreparedStatement statement = connection.prepareStatement(
-                     "INSERT INTO \"task data\" (player_id, user_name, task_name, room_number, completed, created_at, updated_at) VALUES (?, ?, ?, ?, 1, ?, ?) " +
-                             "ON CONFLICT(player_id, task_name, room_number) DO UPDATE SET " +
-                             "user_name=excluded.user_name, completed=1, updated_at=excluded.updated_at")) {
-            statement.setString(1, subject.playerId());
-            statement.setString(2, subject.userName());
-            statement.setString(3, subject.taskName());
-            statement.setInt(4, subject.roomNumber());
-            statement.setString(5, now.toString());
-            statement.setString(6, now.toString());
+                     "INSERT INTO \"task data\" (user_name, task_name, room_number, completed) VALUES (?, ?, ?, 1) " +
+                             "ON CONFLICT(user_name, task_name, room_number) DO UPDATE SET " +
+                             "completed=1")) {
+            statement.setString(1, subject.userName());
+            statement.setString(2, subject.taskName());
+            statement.setInt(3, subject.roomNumber());
             statement.executeUpdate();
         } catch (SQLException e) {
             throw new IllegalStateException("Failed to complete task data", e);
         }
 
-        return getTaskDataByKey(subject.playerId(), subject.taskName(), subject.roomNumber());
+        return getTaskDataByKey(subject.userName(), subject.taskName(), subject.roomNumber());
     }
 
     public List<TaskDataEntry> getTaskData() {
@@ -513,18 +505,16 @@ public class GameService {
 
         try (Connection connection = dataSource.getConnection();
              PreparedStatement statement = connection.prepareStatement(
-                     "SELECT player_id, user_name, task_name, room_number, completed, created_at, updated_at FROM \"task data\" ORDER BY datetime(updated_at) DESC")) {
+                     "SELECT user_name, task_name, room_number, completed FROM \"task data\" " +
+                             "ORDER BY room_number ASC, user_name COLLATE NOCASE ASC, task_name COLLATE NOCASE ASC")) {
             try (ResultSet resultSet = statement.executeQuery()) {
                 while (resultSet.next()) {
                     entries.add(new TaskDataEntry(
-                            resultSet.getString("player_id"),
                             resultSet.getString("user_name"),
                             resultSet.getString("task_name"),
                             resultSet.getString("task_name"),
                             resultSet.getInt("room_number"),
-                            resultSet.getInt("completed") == 1,
-                            Instant.parse(resultSet.getString("created_at")),
-                            Instant.parse(resultSet.getString("updated_at"))
+                            resultSet.getInt("completed") == 1
                     ));
                 }
             }
@@ -578,44 +568,20 @@ public class GameService {
             return;
         }
 
-        boolean needsMigration = !columns.contains("player_id")
-                || !columns.contains("user_name")
+        boolean needsMigration = !columns.contains("user_name")
                 || !columns.contains("task_name")
-                || !columns.contains("room_number");
+                || !columns.contains("room_number")
+                || !columns.contains("completed")
+                || columns.contains("player_id")
+                || columns.contains("created_at")
+                || columns.contains("updated_at");
         if (needsMigration) {
             migrateTaskDataTable(connection);
             return;
         }
 
-        boolean needsCreatedAt = !columns.contains("created_at");
-        boolean needsUpdatedAt = !columns.contains("updated_at");
-
-        if (needsCreatedAt) {
-            try (Statement alterStatement = connection.createStatement()) {
-                alterStatement.execute("ALTER TABLE \"task data\" ADD COLUMN created_at TEXT");
-            }
-        }
-
-        if (needsUpdatedAt) {
-            try (Statement alterStatement = connection.createStatement()) {
-                alterStatement.execute("ALTER TABLE \"task data\" ADD COLUMN updated_at TEXT");
-            }
-        }
-
-        if (needsCreatedAt || needsUpdatedAt) {
-            String now = Instant.now().toString();
-            try (PreparedStatement backfillStatement = connection.prepareStatement(
-                    "UPDATE \"task data\" SET " +
-                            "created_at = COALESCE(created_at, ?), " +
-                            "updated_at = COALESCE(updated_at, COALESCE(created_at, ?)) " +
-                            "WHERE created_at IS NULL OR updated_at IS NULL")) {
-                backfillStatement.setString(1, now);
-                backfillStatement.setString(2, now);
-                backfillStatement.executeUpdate();
-            }
-        }
-
         try (Statement indexStatement = connection.createStatement()) {
+            indexStatement.execute("CREATE INDEX IF NOT EXISTS idx_task_data_completed ON \"task data\"(completed)");
             indexStatement.execute("CREATE INDEX IF NOT EXISTS idx_task_data_user_name ON \"task data\"(user_name)");
             indexStatement.execute("CREATE INDEX IF NOT EXISTS idx_task_data_room_number ON \"task data\"(room_number)");
         }
@@ -628,18 +594,15 @@ public class GameService {
         PlayerSession fallbackPlayer = ensurePlayerByName(connection, fallbackPlayerName);
 
         try (Statement statement = connection.createStatement()) {
+            statement.execute("DROP TABLE IF EXISTS " + legacyTaskTable);
             statement.execute("ALTER TABLE " + newTaskTable + " RENAME TO " + legacyTaskTable);
             statement.execute(
                     "CREATE TABLE " + newTaskTable + " (" +
-                            "player_id TEXT NOT NULL, " +
                             "user_name TEXT NOT NULL, " +
                             "task_name TEXT NOT NULL, " +
                             "room_number INTEGER NOT NULL DEFAULT -1, " +
                             "completed INTEGER NOT NULL DEFAULT 0 CHECK (completed IN (0, 1)), " +
-                            "created_at TEXT NOT NULL, " +
-                            "updated_at TEXT NOT NULL, " +
-                            "PRIMARY KEY (player_id, task_name, room_number), " +
-                            "FOREIGN KEY (player_id) REFERENCES players(player_id)" +
+                            "PRIMARY KEY (user_name, task_name, room_number)" +
                             ")"
             );
             statement.execute("CREATE INDEX IF NOT EXISTS idx_task_data_completed ON \"task data\"(completed)");
@@ -662,32 +625,15 @@ public class GameService {
                         userName = fallbackPlayer.playerName();
                     }
 
-                    String playerId = firstNonBlank(resultSet, metaData, "player_id", "playerid");
-                    if (playerId == null) {
-                        playerId = fallbackPlayer.playerId();
-                    }
-
                     boolean completed = readBooleanColumn(resultSet, metaData, "completed", false);
                     int roomNumber = readIntColumn(resultSet, metaData, -1, "room_number", "room", "room_id");
-                    String createdAt = firstNonBlank(resultSet, metaData, "created_at", "createdat");
-                    if (createdAt == null) {
-                        createdAt = Instant.now().toString();
-                    }
-
-                    String updatedAt = firstNonBlank(resultSet, metaData, "updated_at", "updatedat");
-                    if (updatedAt == null) {
-                        updatedAt = createdAt;
-                    }
 
                     try (PreparedStatement insertStatement = connection.prepareStatement(
-                            "INSERT INTO \"task data\" (player_id, user_name, task_name, room_number, completed, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)")) {
-                        insertStatement.setString(1, playerId);
-                        insertStatement.setString(2, userName);
-                        insertStatement.setString(3, taskName);
-                        insertStatement.setInt(4, roomNumber);
-                        insertStatement.setInt(5, completed ? 1 : 0);
-                        insertStatement.setString(6, createdAt);
-                        insertStatement.setString(7, updatedAt);
+                            "INSERT INTO \"task data\" (user_name, task_name, room_number, completed) VALUES (?, ?, ?, ?)")) {
+                        insertStatement.setString(1, userName);
+                        insertStatement.setString(2, taskName);
+                        insertStatement.setInt(3, roomNumber);
+                        insertStatement.setInt(4, completed ? 1 : 0);
                         insertStatement.executeUpdate();
                     }
                 }
@@ -789,11 +735,12 @@ public class GameService {
         return new PlayerSession(playerId, playerName, registeredAt);
     }
 
-    private TaskDataEntry getTaskDataByKey(String playerId, String taskName, int roomNumber) {
+    private TaskDataEntry getTaskDataByKey(String userName, String taskName, int roomNumber) {
         try (Connection connection = dataSource.getConnection();
              PreparedStatement statement = connection.prepareStatement(
-                     "SELECT player_id, user_name, task_name, room_number, completed, created_at, updated_at FROM \"task data\" WHERE player_id = ? AND task_name = ? AND room_number = ? LIMIT 1")) {
-            statement.setString(1, playerId);
+                     "SELECT user_name, task_name, room_number, completed FROM \"task data\" " +
+                             "WHERE user_name = ? AND task_name = ? AND room_number = ? LIMIT 1")) {
+            statement.setString(1, userName);
             statement.setString(2, taskName);
             statement.setInt(3, roomNumber);
             try (ResultSet resultSet = statement.executeQuery()) {
@@ -802,14 +749,11 @@ public class GameService {
                 }
 
                 return new TaskDataEntry(
-                        resultSet.getString("player_id"),
                         resultSet.getString("user_name"),
                         resultSet.getString("task_name"),
                         resultSet.getString("task_name"),
                         resultSet.getInt("room_number"),
-                        resultSet.getInt("completed") == 1,
-                        Instant.parse(resultSet.getString("created_at")),
-                        Instant.parse(resultSet.getString("updated_at"))
+                        resultSet.getInt("completed") == 1
                 );
             }
         } catch (SQLException e) {
@@ -820,21 +764,22 @@ public class GameService {
     private TaskSubject resolveTaskSubject(TaskDataRequest request) {
         String taskName = resolveTaskName(request);
         int roomNumber = resolveRoomNumber(request);
+        String requestedUserName = resolveRequestedUserName(request);
 
         PlayerSession player;
         if (request.playerId() != null && !request.playerId().isBlank()) {
             player = getPlayer(request.playerId().trim());
-        } else if (request.userName() != null && !request.userName().isBlank()) {
-            player = getOrCreatePlayerByName(request.userName().trim());
+        } else if (requestedUserName != null) {
+            player = getOrCreatePlayerByName(requestedUserName);
         } else {
             player = getOrCreatePlayerByName("legacy-task-user");
         }
 
-        String userName = request.userName() != null && !request.userName().isBlank()
-                ? request.userName().trim()
+        String userName = requestedUserName != null
+                ? requestedUserName
                 : player.playerName();
 
-        return new TaskSubject(player.playerId(), userName, taskName, roomNumber);
+        return new TaskSubject(userName, taskName, roomNumber);
     }
 
     private String resolveTaskName(TaskDataRequest request) {
@@ -842,12 +787,18 @@ public class GameService {
             return request.taskName().trim();
         }
 
+        if (request.simplifiedTaskName() != null && !request.simplifiedTaskName().isBlank()) {
+            return request.simplifiedTaskName().trim();
+        }
+
         if (request.name() != null && !request.name().isBlank()) {
             return request.name().trim();
         }
 
-        if (request.room() != null && request.taskId() != null) {
-            return "room:" + request.room() + ":task:" + request.taskId();
+        Integer roomNumber = firstNonNull(request.room(), request.roomNumber());
+        Integer taskNumber = firstNonNull(request.taskId(), request.taskNumber());
+        if (roomNumber != null && taskNumber != null) {
+            return "room:" + roomNumber + ":task:" + taskNumber;
         }
 
         throw new ResponseStatusException(
@@ -857,13 +808,30 @@ public class GameService {
     }
 
     private int resolveRoomNumber(TaskDataRequest request) {
-        if (request.room() != null) {
-            return request.room();
+        Integer roomNumber = firstNonNull(request.room(), request.roomNumber());
+        if (roomNumber != null) {
+            return roomNumber;
         }
         return -1;
     }
 
-    private record TaskSubject(String playerId, String userName, String taskName, int roomNumber) {}
+    private String resolveRequestedUserName(TaskDataRequest request) {
+        if (request.userName() != null && !request.userName().isBlank()) {
+            return request.userName().trim();
+        }
+
+        if (request.characterDisplayName() != null && !request.characterDisplayName().isBlank()) {
+            return request.characterDisplayName().trim();
+        }
+
+        return null;
+    }
+
+    private <T> T firstNonNull(T first, T second) {
+        return first != null ? first : second;
+    }
+
+    private record TaskSubject(String userName, String taskName, int roomNumber) {}
 
     private PlayerSession findPlayerByName(String playerName) {
         try (Connection connection = dataSource.getConnection();
