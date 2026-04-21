@@ -68,6 +68,28 @@ public class TaskController {
         return gameService.completeTaskData(request);
     }
 
+    @PostMapping(value = "/frontend/tasks", consumes = MediaType.APPLICATION_JSON_VALUE)
+    public TaskDataEntry saveFrontendTask(@Valid @RequestBody TaskDataRequest request) {
+        return gameService.saveTaskData(request);
+    }
+
+    @PostMapping(value = "/frontend/tasks", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public TaskDataEntry saveFrontendTask(@RequestPart("requestFile") MultipartFile requestFile) {
+        TaskDataRequest request = readJsonRequest(requestFile, TaskDataRequest.class);
+        return gameService.saveTaskData(request);
+    }
+
+    @PostMapping(value = "/frontend/tasks/complete", consumes = MediaType.APPLICATION_JSON_VALUE)
+    public TaskDataEntry completeFrontendTask(@Valid @RequestBody TaskDataRequest request) {
+        return gameService.completeTaskData(request);
+    }
+
+    @PostMapping(value = "/frontend/tasks/complete", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public TaskDataEntry completeFrontendTask(@RequestPart("requestFile") MultipartFile requestFile) {
+        TaskDataRequest request = readJsonRequest(requestFile, TaskDataRequest.class);
+        return gameService.completeTaskData(request);
+    }
+
     private <T> T readJsonRequest(MultipartFile requestFile, Class<T> requestType) {
         if (requestFile == null || requestFile.isEmpty()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "requestFile is required");

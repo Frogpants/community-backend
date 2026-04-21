@@ -110,12 +110,13 @@ GET /api/leaderboard?limit=10
 ### Save task data
 
 ```http
-POST /tasks
+POST /api/tasks
 Content-Type: application/json
 ```
 
 ```json
 {
+	"userName": "Avery",
 	"name": "wash dishes",
 	"completed": false
 }
@@ -124,12 +125,13 @@ Content-Type: application/json
 ### Mark task completed
 
 ```http
-POST /tasks/complete
+POST /api/tasks/complete
 Content-Type: application/json
 ```
 
 ```json
 {
+	"userName": "Avery",
 	"name": "wash dishes"
 }
 ```
@@ -137,10 +139,28 @@ Content-Type: application/json
 ### Fetch task data
 
 ```http
-GET /tasks
+GET /api/tasks
 ```
 
-Returns items with `name`, `completed`, `createdAt`, and `updatedAt`.
+Returns items with `userName`, `name`, `taskName`, `room`, and `completed`.
+
+### Frontend task submit
+
+```http
+POST /api/frontend/tasks
+Content-Type: application/json
+```
+
+```json
+{
+  "playerName": "Avery",
+  "taskID": 7,
+  "roomId": 2,
+  "isCompleted": false
+}
+```
+
+To mark a task complete, send the same payload shape to `POST /api/frontend/tasks/complete`.
 
 ### Frontend score submit (by player name)
 

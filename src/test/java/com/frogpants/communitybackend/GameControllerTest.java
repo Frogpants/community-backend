@@ -220,6 +220,82 @@ class GameControllerTest {
     }
 
     @Test
+    void frontendTaskEndpointsPersistGamePayloadAliases() throws Exception {
+        String playerResponse = mockMvc.perform(post("/api/frontend/players")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content("""
+                                        {
+                                                "playerName": "Remy"
+                                        }
+                                        """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.playerName").value("Remy"))
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+
+        String playerId = playerResponse.replaceAll(".*\"playerId\":\"([^\"]+)\".*", "$1");
+
+        mockMvc.perform(post("/api/frontend/tasks")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content("""
+                                        {
+                                                "playerName": "Remy",
+                                                "taskID": 12,
+                                                "roomId": 3,
+                                                "isCompleted": false
+                                        }
+                                        """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.userName").value("Remy"))
+                .andExpect(jsonPath("$.name").value("room:3:task:12"))
+                .andExpect(jsonPath("$.room").value(3))
+                .andExpect(jsonPath("$.completed").value(false));
+
+        mockMvc.perform(post("/api/frontend/tasks/complete")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content("""
+                                        {
+                                                "playerID": "%s",
+                                                "taskID": 12,
+                                                "roomId": 3
+                                        }
+                                        """.formatted(playerId)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.userName").value("Remy"))
+                .andExpect(jsonPath("$.name").value("room:3:task:12"))
+                .andExpect(jsonPath("$.room").value(3))
+                .andExpect(jsonPath("$.completed").value(true));
+
+        mockMvc.perform(get("/api/tasks"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[?(@.userName=='Remy' && @.taskName=='room:3:task:12' && @.room==3 && @.completed==true)]")
+                        .value(hasSize(greaterThan(0))));
+    }
+
+    @Test
+    void taskEndpointsAcceptTaskIdWithoutRoom() throws Exception {
+        mockMvc.perform(post("/api/tasks/complete")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content("""
+                                        {
+                                                "username": "Kai",
+                                                "taskID": 5
+                                        }
+                                        """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.userName").value("Kai"))
+                .andExpect(jsonPath("$.name").value("task:5"))
+                .andExpect(jsonPath("$.room").value(-1))
+                .andExpect(jsonPath("$.completed").value(true));
+
+        mockMvc.perform(get("/api/tasks"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[?(@.userName=='Kai' && @.taskName=='task:5' && @.room==-1 && @.completed==true)]")
+                        .value(hasSize(greaterThan(0))));
+    }
+
+    @Test
     void multiplayerRoomLifecycleWorks() throws Exception {
                                 String createRoomResponse = mockMvc.perform(multipart("/api/multiplayer/rooms")
                                                                                                 .file(jsonPart("""

@@ -801,9 +801,13 @@ public class GameService {
             return "room:" + roomNumber + ":task:" + taskNumber;
         }
 
+        if (taskNumber != null) {
+            return "task:" + taskNumber;
+        }
+
         throw new ResponseStatusException(
                 HttpStatus.BAD_REQUEST,
-                "Task request must provide taskName/name or both room and taskId"
+                "Task request must provide taskName/name, taskId, or both room and taskId"
         );
     }
 
